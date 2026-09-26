@@ -11,7 +11,8 @@ import {
   ShieldAlert, 
   Layers,
   X,
-  Files
+  Files,
+  BarChart3
 } from 'lucide-react';
 import { LegalDocument, UserProfile } from '../types';
 
@@ -25,6 +26,7 @@ export type ActiveTab =
   | 'checklist' 
   | 'legal_info' 
   | 'briefing' 
+  | 'analytics'
   | 'privacy';
 
 interface NavigationProps {
@@ -83,6 +85,7 @@ export const Navigation: React.FC<NavigationProps> = ({
     { id: 'checklist', label: 'Before you agree', icon: CheckSquare },
     { id: 'legal_info', label: 'Everyday guides', icon: BookOpen },
     { id: 'briefing', label: 'Prepare for a lawyer', icon: Briefcase },
+    { id: 'analytics', label: 'BigQuery Analytics', icon: BarChart3, badge: 'Live', badgeColor: 'bg-[#E8F0FE] text-[#1A73E8]' },
     { id: 'privacy', label: 'About & Safety', icon: ShieldAlert },
   ];
 

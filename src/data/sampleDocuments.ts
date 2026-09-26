@@ -606,7 +606,7 @@ export const SAMPLE_RESIDENTIAL_RENTAL: LegalDocument = {
     financialObligations: '₹1,60,000 Security Deposit (5 months) + ₹15,000 painting deduction upon vacating',
     noticePeriod: '1 Month prior written notice to vacate',
     bondOrLockIn: '11-Month Minimum Lock-in Period',
-    attentionItemsCount: 4,
+    attentionItemsCount: 2,
   },
   pages: [
     {

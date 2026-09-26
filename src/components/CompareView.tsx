@@ -26,6 +26,26 @@ export const CompareView: React.FC<CompareViewProps> = ({
   onOpenUpload,
   onSwitchToDemo,
 }) => {
+  const [docAId, setDocAId] = useState<string>(
+    initialComparison?.docAId || documents[0]?.id || ''
+  );
+  const [docBId, setDocBId] = useState<string>(
+    initialComparison?.docBId || documents[1]?.id || documents[0]?.id || ''
+  );
+  const [comparison, setComparison] = useState<DocumentComparison | null>(
+    initialComparison || null
+  );
+  const [isComparing, setIsComparing] = useState<boolean>(false);
+  const [selectedFilter, setSelectedFilter] = useState<string>('ALL');
+
+  React.useEffect(() => {
+    const validA = documents.find(d => d.id === docAId) ? docAId : (initialComparison?.docAId || documents[0]?.id || '');
+    const validB = documents.find(d => d.id === docBId) ? docBId : (initialComparison?.docBId || documents[1]?.id || documents[0]?.id || '');
+    setDocAId(validA);
+    setDocBId(validB);
+    setComparison(initialComparison || null);
+  }, [initialComparison, documents, docAId, docBId]);
+
   if (documents.length < 2) {
     return (
       <div className="max-w-2xl mx-auto px-6 py-16 text-center space-y-6">
@@ -65,26 +85,6 @@ export const CompareView: React.FC<CompareViewProps> = ({
       </div>
     );
   }
-
-  const [docAId, setDocAId] = useState<string>(
-    initialComparison?.docAId || documents[0]?.id || ''
-  );
-  const [docBId, setDocBId] = useState<string>(
-    initialComparison?.docBId || documents[1]?.id || documents[0]?.id || ''
-  );
-  const [comparison, setComparison] = useState<DocumentComparison | null>(
-    initialComparison || null
-  );
-  const [isComparing, setIsComparing] = useState<boolean>(false);
-  const [selectedFilter, setSelectedFilter] = useState<string>('ALL');
-
-  React.useEffect(() => {
-    const validA = documents.find(d => d.id === docAId) ? docAId : (initialComparison?.docAId || documents[0]?.id || '');
-    const validB = documents.find(d => d.id === docBId) ? docBId : (initialComparison?.docBId || documents[1]?.id || documents[0]?.id || '');
-    setDocAId(validA);
-    setDocBId(validB);
-    setComparison(initialComparison || null);
-  }, [initialComparison, documents]);
 
   const docA = documents.find(d => d.id === docAId) || documents[0];
   const docB = documents.find(d => d.id === docBId) || documents[1] || documents[0];

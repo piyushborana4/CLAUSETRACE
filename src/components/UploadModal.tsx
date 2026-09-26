@@ -2,7 +2,6 @@ import React, { useState, useRef } from 'react';
 import { 
   X, 
   Upload, 
-  FileText, 
   CheckCircle2, 
   Loader2, 
   AlertCircle,
@@ -12,6 +11,8 @@ import {
   Sparkles
 } from 'lucide-react';
 import { LegalDocument } from '../types';
+import { useModalFocusTrap } from '../hooks/useModalFocusTrap';
+import { sanitizePromptInput } from '../lib/sanitizer';
 
 interface UploadModalProps {
   isOpen: boolean;
@@ -37,6 +38,9 @@ export const UploadModal: React.FC<UploadModalProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const modalContainerRef = useModalFocusTrap(isOpen, onClose, {
+    closeOnEscape: !isProcessing,
+  });
 
   if (!isOpen) return null;
 
@@ -50,7 +54,6 @@ export const UploadModal: React.FC<UploadModalProps> = ({
   };
 
   const handleFileSelected = (file: File) => {
-    // Basic format check
     const supportedTypes = [
       'application/pdf', 
       'text/plain', 
@@ -115,12 +118,14 @@ export const UploadModal: React.FC<UploadModalProps> = ({
         base64Data = btoa(binary);
       }
 
+      const sanitizedText = pastedText.trim() ? sanitizePromptInput(pastedText.trim()) : undefined;
+
       const res = await fetch('/api/analyze-document', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           title: docTitle.trim() || (selectedFile ? selectedFile.name : 'Uploaded Document'),
-          textContent: pastedText.trim() || undefined,
+          textContent: sanitizedText,
           base64Data,
           mimeType,
         }),
@@ -142,7 +147,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
                   heading: f.title,
                   text: f.evidence || f.summary,
                 })),
-                rawText: pastedText || 'Uploaded document content reviewed.',
+                rawText: sanitizedText || 'Uploaded document content reviewed.',
               }
             ];
 
@@ -188,12 +193,22 @@ export const UploadModal: React.FC<UploadModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl border border-[#DADCE0] shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
+    <div 
+      className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4"
+      role="presentation"
+    >
+      <div 
+        ref={modalContainerRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="upload-modal-title"
+        tabIndex={-1}
+        className="bg-white rounded-3xl border border-[#DADCE0] shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh] focus:outline-none"
+      >
         {/* Header */}
         <div className="px-6 py-5 border-b border-[#F1F3F4] flex items-center justify-between">
           <div>
-            <h2 className="font-display font-bold text-lg text-[#1F1F1F]">
+            <h2 id="upload-modal-title" className="font-display font-bold text-lg text-[#1F1F1F]">
               Upload your document
             </h2>
             <p className="text-xs text-[#5F6368] mt-0.5">
@@ -204,6 +219,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
           <button
             onClick={onClose}
             disabled={isProcessing}
+            aria-label="Close upload dialog"
             className="p-1.5 rounded-xl hover:bg-[#F1F3F4] text-[#5F6368] transition-colors cursor-pointer"
           >
             <X className="w-4 h-4" />
@@ -212,9 +228,9 @@ export const UploadModal: React.FC<UploadModalProps> = ({
 
         {/* Processing Pipeline Screen */}
         {isProcessing ? (
-          <div className="p-10 text-center space-y-6">
+          <div className="p-10 text-center space-y-6" aria-live="polite">
             <div className="w-14 h-14 rounded-2xl bg-[#E8F0FE] text-[#1A73E8] flex items-center justify-center mx-auto shadow-xs">
-              <Loader2 className="w-7 h-7 animate-spin" />
+              <Loader2 className="w-7 h-7 animate-spin" aria-hidden="true" />
             </div>
 
             <div className="space-y-1.5">
@@ -227,15 +243,23 @@ export const UploadModal: React.FC<UploadModalProps> = ({
             </div>
 
             <div className="pt-2 text-xs text-[#137333] flex items-center justify-center gap-1.5 font-medium">
-              <ShieldCheck className="w-4 h-4" />
+              <ShieldCheck className="w-4 h-4" aria-hidden="true" />
               <span>Grounded in actual document clauses</span>
             </div>
           </div>
         ) : (
           <>
             {/* Tab switch */}
-            <div className="px-6 pt-3 border-b border-[#F1F3F4] flex gap-4 text-xs font-semibold">
+            <div 
+              role="tablist"
+              aria-label="Upload options"
+              className="px-6 pt-3 border-b border-[#F1F3F4] flex gap-4 text-xs font-semibold"
+            >
               <button
+                role="tab"
+                aria-selected={activeTab === 'upload'}
+                id="tab-upload"
+                aria-controls="panel-upload"
                 onClick={() => { setActiveTab('upload'); setErrorMessage(null); }}
                 className={`pb-2.5 border-b-2 flex items-center gap-1.5 transition-colors cursor-pointer ${
                   activeTab === 'upload'
@@ -243,11 +267,15 @@ export const UploadModal: React.FC<UploadModalProps> = ({
                     : 'border-transparent text-[#5F6368] hover:text-[#1F1F1F]'
                 }`}
               >
-                <FileUp className="w-4 h-4" />
+                <FileUp className="w-4 h-4" aria-hidden="true" />
                 <span>Upload file (PDF, image)</span>
               </button>
 
               <button
+                role="tab"
+                aria-selected={activeTab === 'paste'}
+                id="tab-paste"
+                aria-controls="panel-paste"
                 onClick={() => { setActiveTab('paste'); setErrorMessage(null); }}
                 className={`pb-2.5 border-b-2 flex items-center gap-1.5 transition-colors cursor-pointer ${
                   activeTab === 'paste'
@@ -255,7 +283,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
                     : 'border-transparent text-[#5F6368] hover:text-[#1F1F1F]'
                 }`}
               >
-                <Type className="w-4 h-4" />
+                <Type className="w-4 h-4" aria-hidden="true" />
                 <span>Paste text</span>
               </button>
             </div>
@@ -263,24 +291,37 @@ export const UploadModal: React.FC<UploadModalProps> = ({
             {/* Body */}
             <div className="p-6 space-y-4 overflow-y-auto flex-1">
               {errorMessage && (
-                <div className="p-3.5 rounded-2xl bg-[#FCE8E6] border border-[#FAD2CF] flex items-start gap-2.5 text-xs text-[#D93025]">
-                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <div 
+                  role="alert"
+                  className="p-3.5 rounded-2xl bg-[#FCE8E6] border border-[#FAD2CF] flex items-start gap-2.5 text-xs text-[#D93025]"
+                >
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
                   <div className="leading-relaxed">{errorMessage}</div>
                 </div>
               )}
 
               {activeTab === 'upload' ? (
-                <div className="space-y-4">
+                <div id="panel-upload" role="tabpanel" aria-labelledby="tab-upload" className="space-y-4">
                   {/* Drag and Drop Zone */}
                   <div
+                    tabIndex={0}
+                    role="button"
+                    aria-label="Upload document file. Click or drag and drop."
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        fileInputRef.current?.click();
+                      }
+                    }}
                     onDragOver={(e) => e.preventDefault()}
                     onDrop={handleFileDrop}
                     onClick={() => fileInputRef.current?.click()}
-                    className="p-8 border-2 border-dashed border-[#DADCE0] hover:border-[#1A73E8] rounded-2xl bg-[#F8F9FA] hover:bg-[#E8F0FE]/30 transition-all text-center cursor-pointer space-y-3"
+                    className="p-8 border-2 border-dashed border-[#DADCE0] hover:border-[#1A73E8] focus:border-[#1A73E8] focus:ring-2 focus:ring-[#1A73E8]/20 rounded-2xl bg-[#F8F9FA] hover:bg-[#E8F0FE]/30 transition-all text-center cursor-pointer space-y-3"
                   >
                     <input
                       ref={fileInputRef}
                       type="file"
+                      aria-label="Select document file"
                       accept=".pdf,.txt,.doc,.docx,image/*"
                       className="hidden"
                       onChange={(e) => {
@@ -291,7 +332,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
                     />
 
                     <div className="w-12 h-12 rounded-2xl bg-white border border-[#E0E2E6] text-[#1A73E8] flex items-center justify-center mx-auto shadow-2xs">
-                      <Upload className="w-6 h-6" />
+                      <Upload className="w-6 h-6" aria-hidden="true" />
                     </div>
 
                     <div>
@@ -305,7 +346,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
 
                     {selectedFile && (
                       <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#E6F4EA] text-[#137333] text-xs font-medium">
-                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />
                         <span>{Math.round(selectedFile.size / 1024)} KB ready</span>
                       </div>
                     )}
@@ -313,10 +354,11 @@ export const UploadModal: React.FC<UploadModalProps> = ({
 
                   {/* Document Name input */}
                   <div>
-                    <label className="block text-xs font-semibold text-[#3C4043] mb-1">
+                    <label htmlFor="doc-title-input" className="block text-xs font-semibold text-[#3C4043] mb-1">
                       Document name (optional)
                     </label>
                     <input
+                      id="doc-title-input"
                       type="text"
                       placeholder="e.g. My Apartment Lease Agreement"
                       value={docTitle}
@@ -326,12 +368,13 @@ export const UploadModal: React.FC<UploadModalProps> = ({
                   </div>
                 </div>
               ) : (
-                <div className="space-y-4">
+                <div id="panel-paste" role="tabpanel" aria-labelledby="tab-paste" className="space-y-4">
                   <div>
-                    <label className="block text-xs font-semibold text-[#3C4043] mb-1">
+                    <label htmlFor="paste-doc-title-input" className="block text-xs font-semibold text-[#3C4043] mb-1">
                       Document Title
                     </label>
                     <input
+                      id="paste-doc-title-input"
                       type="text"
                       placeholder="e.g. Employment Offer Letter"
                       value={docTitle}
@@ -341,10 +384,11 @@ export const UploadModal: React.FC<UploadModalProps> = ({
                   </div>
 
                   <div>
-                    <label className="block text-xs font-semibold text-[#3C4043] mb-1">
+                    <label htmlFor="paste-textarea" className="block text-xs font-semibold text-[#3C4043] mb-1">
                       Paste document text
                     </label>
                     <textarea
+                      id="paste-textarea"
                       rows={8}
                       placeholder="Paste clauses, letter content, or agreement text here..."
                       value={pastedText}
@@ -365,14 +409,14 @@ export const UploadModal: React.FC<UploadModalProps> = ({
                 }}
                 className="text-xs text-[#B06000] hover:text-[#8C4D00] flex items-center gap-1 font-semibold"
               >
-                <Sparkles className="w-3.5 h-3.5" />
+                <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />
                 <span>Try demo documents instead</span>
               </button>
 
               <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
                 <button
                   onClick={onClose}
-                  className="px-4 py-2 rounded-xl text-xs font-medium text-[#5F6368] hover:bg-[#F1F3F4] transition-colors"
+                  className="px-4 py-2 rounded-xl text-xs font-medium text-[#5F6368] hover:bg-[#F1F3F4] transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>

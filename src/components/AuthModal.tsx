@@ -4,18 +4,16 @@ import {
   Layers, 
   Mail, 
   Lock, 
-  ArrowRight, 
   Sparkles, 
-  ShieldCheck, 
-  CheckCircle2,
-  User,
-  KeyRound,
-  Loader2,
-  AlertCircle
+  User, 
+  Loader2, 
+  AlertCircle 
 } from 'lucide-react';
 import { UserProfile } from '../types';
-import { auth, googleProvider, signInWithPopup, firebaseSignOut } from '../lib/firebase';
+import { auth, googleProvider, signInWithPopup } from '../lib/firebase';
 import { syncUserProfileToFirestore } from '../lib/firestoreService';
+import { useModalFocusTrap } from '../hooks/useModalFocusTrap';
+import { sanitizePromptInput } from '../lib/sanitizer';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -37,6 +35,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  const modalContainerRef = useModalFocusTrap(isOpen, onClose, {
+    closeOnEscape: !isLoading,
+  });
+
   if (!isOpen) return null;
 
   const handleGoogleLogin = async () => {
@@ -54,7 +56,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         provider: 'google',
       };
 
-      // Sync user profile to Firestore
       try {
         await syncUserProfileToFirestore(profile);
       } catch (syncErr) {
@@ -65,11 +66,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       onClose();
     } catch (err: any) {
       console.error('Google Sign-in error:', err);
-      // If popup is closed by user or cancelled
       if (err.code === 'auth/popup-closed-by-user' || err.code === 'auth/cancelled-popup-request') {
         setErrorMessage('Sign-in popup was closed before completing.');
       } else {
-        // Fallback to designated user profile for convenience in preview if popup permissions are restricted
         const profile: UserProfile = {
           id: 'user-google-real',
           name: 'Piyush Borana',
@@ -93,10 +92,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setIsLoading(true);
     setErrorMessage(null);
     try {
+      const sanitizedEmail = sanitizePromptInput(email || currentEmail).toLowerCase();
+      const sanitizedName = sanitizePromptInput(name || email.split('@')[0] || 'User');
+
       const profile: UserProfile = {
-        id: `user-pwd-${(email || currentEmail).replace(/[^a-zA-Z0-9]/g, '_')}`,
-        name: name || email.split('@')[0] || 'User',
-        email: email || currentEmail,
+        id: `user-pwd-${sanitizedEmail.replace(/[^a-zA-Z0-9]/g, '_')}`,
+        name: sanitizedName,
+        email: sanitizedEmail,
         accountType: 'personal',
         provider: 'password',
       };
@@ -129,18 +131,28 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/45 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl border border-[#DADCE0] shadow-2xl w-full max-w-md overflow-hidden flex flex-col">
+    <div 
+      className="fixed inset-0 z-50 bg-black/45 backdrop-blur-xs flex items-center justify-center p-4"
+      role="presentation"
+    >
+      <div 
+        ref={modalContainerRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="auth-modal-title"
+        tabIndex={-1}
+        className="bg-white rounded-3xl border border-[#DADCE0] shadow-2xl w-full max-w-md overflow-hidden flex flex-col focus:outline-none"
+      >
         {/* Header */}
         <div className="px-6 pt-6 pb-4 flex items-center justify-between border-b border-[#F1F3F4]">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-xl bg-[#1A73E8] flex items-center justify-center text-white shadow-xs">
-              <Layers className="w-4 h-4" />
+              <Layers className="w-4 h-4" aria-hidden="true" />
             </div>
             <div>
-              <div className="font-display font-bold text-base text-[#1F1F1F]">
+              <h2 id="auth-modal-title" className="font-display font-bold text-base text-[#1F1F1F]">
                 CLAUSETRACE Account
-              </div>
+              </h2>
               <div className="text-[10px] uppercase tracking-wider text-[#5F6368] font-semibold">
                 Sign in with Google or switch workspace
               </div>
@@ -149,6 +161,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
           <button
             onClick={onClose}
+            aria-label="Close authentication dialog"
             className="p-1.5 rounded-xl hover:bg-[#F1F3F4] text-[#5F6368] transition-colors cursor-pointer"
           >
             <X className="w-4 h-4" />
@@ -158,8 +171,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         {/* Content */}
         <div className="p-6 space-y-5">
           {errorMessage && (
-            <div className="p-3 rounded-xl bg-[#FCE8E6] border border-[#FAD2CF] flex items-center gap-2 text-xs text-[#C5221F]">
-              <AlertCircle className="w-4 h-4 shrink-0" />
+            <div 
+              role="alert" 
+              className="p-3 rounded-xl bg-[#FCE8E6] border border-[#FAD2CF] flex items-center gap-2 text-xs text-[#C5221F]"
+            >
+              <AlertCircle className="w-4 h-4 shrink-0" aria-hidden="true" />
               <span>{errorMessage}</span>
             </div>
           )}
@@ -172,9 +188,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-2xl border border-[#DADCE0] hover:bg-[#F8F9FA] hover:border-[#BDC1C6] text-sm font-semibold text-[#1F1F1F] transition-all shadow-xs cursor-pointer disabled:opacity-60"
           >
             {isLoading ? (
-              <Loader2 className="w-4 h-4 animate-spin text-[#1A73E8]" />
+              <Loader2 className="w-4 h-4 animate-spin text-[#1A73E8]" aria-hidden="true" />
             ) : (
-              <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+              <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
                 <path
                   fill="#4285F4"
                   d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
@@ -209,12 +225,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           <form onSubmit={handlePasswordLogin} className="space-y-3">
             {mode === 'signup' && (
               <div>
-                <label className="block text-xs font-semibold text-[#3C4043] mb-1">
+                <label htmlFor="auth-name-input" className="block text-xs font-semibold text-[#3C4043] mb-1">
                   Your Full Name
                 </label>
                 <div className="relative">
-                  <User className="w-3.5 h-3.5 text-[#70757A] absolute left-3.5 top-3" />
+                  <User className="w-3.5 h-3.5 text-[#70757A] absolute left-3.5 top-3" aria-hidden="true" />
                   <input
+                    id="auth-name-input"
                     type="text"
                     required
                     value={name}
@@ -227,12 +244,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             )}
 
             <div>
-              <label className="block text-xs font-semibold text-[#3C4043] mb-1">
+              <label htmlFor="auth-email-input" className="block text-xs font-semibold text-[#3C4043] mb-1">
                 Email Address
               </label>
               <div className="relative">
-                <Mail className="w-3.5 h-3.5 text-[#70757A] absolute left-3.5 top-3" />
+                <Mail className="w-3.5 h-3.5 text-[#70757A] absolute left-3.5 top-3" aria-hidden="true" />
                 <input
+                  id="auth-email-input"
                   type="email"
                   required
                   value={email}
@@ -244,12 +262,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-[#3C4043] mb-1">
+              <label htmlFor="auth-password-input" className="block text-xs font-semibold text-[#3C4043] mb-1">
                 Password
               </label>
               <div className="relative">
-                <Lock className="w-3.5 h-3.5 text-[#70757A] absolute left-3.5 top-3" />
+                <Lock className="w-3.5 h-3.5 text-[#70757A] absolute left-3.5 top-3" aria-hidden="true" />
                 <input
+                  id="auth-password-input"
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -264,7 +283,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               disabled={isLoading}
               className="w-full py-2.5 rounded-xl bg-[#1A73E8] hover:bg-[#1557B0] text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer disabled:opacity-60 flex items-center justify-center gap-2"
             >
-              {isLoading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              {isLoading && <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />}
               <span>{mode === 'login' ? 'Sign In to Workspace' : 'Create Workspace Account'}</span>
             </button>
           </form>
@@ -277,7 +296,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <button
                   type="button"
                   onClick={() => setMode('signup')}
-                  className="text-[#1A73E8] font-semibold hover:underline"
+                  className="text-[#1A73E8] font-semibold hover:underline cursor-pointer"
                 >
                   Create one
                 </button>
@@ -288,7 +307,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <button
                   type="button"
                   onClick={() => setMode('login')}
-                  className="text-[#1A73E8] font-semibold hover:underline"
+                  className="text-[#1A73E8] font-semibold hover:underline cursor-pointer"
                 >
                   Sign in
                 </button>
@@ -301,7 +320,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             <div className="p-3.5 rounded-2xl bg-[#F8F9FA] border border-[#E8EAED] flex items-center justify-between gap-3">
               <div className="space-y-0.5">
                 <div className="text-xs font-semibold text-[#1F1F1F] flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5 text-[#B06000]" />
+                  <Sparkles className="w-3.5 h-3.5 text-[#B06000]" aria-hidden="true" />
                   <span>Presenter / Demo Mode</span>
                 </div>
                 <div className="text-[11px] text-[#5F6368]">

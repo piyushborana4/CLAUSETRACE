@@ -1,0 +1,35 @@
+name: Enterprise CI/CD Quality & Security Gate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  verify:
+    name: Type Integrity, Invariants & Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Static Type Check (Zero TS Errors)
+        run: npm run lint
+
+      - name: Execute Vitest Test Suites (Coverage ≥95%)
+        run: npx vitest run --coverage.enabled=true --coverage.thresholds.statements=95
+
+      - name: Security & Dependency Vulnerability Audit
+        run: npm audit --audit-level=high
+
+      - name: Production Multi-Target Compilation
+        run: npm run build

@@ -11,8 +11,12 @@ import { ActionCenterView } from './components/ActionCenterView';
 import { BeforeYouSignView } from './components/BeforeYouSignView';
 import { ProfessionalPrepView } from './components/ProfessionalPrepView';
 import { PrivacyView } from './components/PrivacyView';
+import { BigQueryAnalyticsView } from './components/BigQueryAnalyticsView';
+import { LiveRegionProvider } from './components/LiveRegion';
 import { UploadModal } from './components/UploadModal';
 import { AuthModal } from './components/AuthModal';
+import { predictivePrefetch } from './lib/predictivePrefetch';
+import { logAuditEvent } from './lib/auditLogger';
 
 import { 
   LegalDocument, 
@@ -36,8 +40,10 @@ import {
   syncUserProfileToFirestore, 
   saveDocumentToFirestore, 
   deleteDocumentFromFirestore, 
-  subscribeUserDocuments 
+  subscribeUserDocuments,
+  updateDocumentChecklistInFirestore
 } from './lib/firestoreService';
+import { secureStorage } from './lib/secureStorage';
 
 const DEFAULT_PERSONAL_USER: UserProfile = {
   id: 'user-google-real',
@@ -62,14 +68,7 @@ export function App() {
 
   // User Profile & Account Authentication State
   const [currentUser, setCurrentUser] = useState<UserProfile>(() => {
-    try {
-      const saved = localStorage.getItem('clausetrace_user_profile');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed && parsed.accountType) return parsed;
-      }
-    } catch {}
-    return DEFAULT_PERSONAL_USER;
+    return secureStorage.getItem<UserProfile>('clausetrace_user_profile', DEFAULT_PERSONAL_USER);
   });
 
   // Demo Documents (for walkthroughs and testing)
@@ -81,18 +80,9 @@ export function App() {
     SAMPLE_REVISED_EMPLOYMENT_AGREEMENT,
   ]);
 
-  // Real User-Uploaded Documents (Stored in Firestore + local cache)
+  // Real User-Uploaded Documents (Stored in Firestore + encrypted local cache)
   const [userDocuments, setUserDocuments] = useState<LegalDocument[]>(() => {
-    try {
-      const saved = localStorage.getItem('clausetrace_user_documents');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) return parsed;
-      }
-    } catch (e) {
-      console.error('Failed to load user documents from storage:', e);
-    }
-    return [];
+    return secureStorage.getItem<LegalDocument[]>('clausetrace_user_documents', []);
   });
 
   // Active document currently displayed
@@ -101,16 +91,8 @@ export function App() {
     if (currentUser.accountType === 'demo') {
       return SAMPLE_RESIDENTIAL_RENTAL;
     }
-    try {
-      const savedUserDocs = localStorage.getItem('clausetrace_user_documents');
-      if (savedUserDocs) {
-        const parsed = JSON.parse(savedUserDocs);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed[0];
-        }
-      }
-    } catch {}
-    return null;
+    const savedDocs = secureStorage.getItem<LegalDocument[]>('clausetrace_user_documents', []);
+    return savedDocs.length > 0 ? savedDocs[0] : null;
   });
 
   const [comparisonData] = useState<DocumentComparison>(SAMPLE_COMPARISON);
@@ -121,16 +103,8 @@ export function App() {
     if (currentUser.accountType === 'demo') {
       return SAMPLE_RESIDENTIAL_RENTAL.checklist || [];
     }
-    try {
-      const savedUserDocs = localStorage.getItem('clausetrace_user_documents');
-      if (savedUserDocs) {
-        const parsed = JSON.parse(savedUserDocs);
-        if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].checklist) {
-          return parsed[0].checklist;
-        }
-      }
-    } catch {}
-    return [];
+    const savedDocs = secureStorage.getItem<LegalDocument[]>('clausetrace_user_documents', []);
+    return savedDocs.length > 0 && savedDocs[0].checklist ? savedDocs[0].checklist : [];
   });
 
   // Cross-Navigation Interactivity States
@@ -196,21 +170,13 @@ export function App() {
     };
   }, [isAuthReady, authUser, currentUser.id, currentUser.accountType]);
 
-  // Save profile and documents to localStorage for offline access
+  // Save profile and documents to encrypted storage for offline access
   useEffect(() => {
-    try {
-      localStorage.setItem('clausetrace_user_profile', JSON.stringify(currentUser));
-    } catch (e) {
-      console.error('Failed to persist user profile:', e);
-    }
+    secureStorage.setItem('clausetrace_user_profile', currentUser);
   }, [currentUser]);
 
   useEffect(() => {
-    try {
-      localStorage.setItem('clausetrace_user_documents', JSON.stringify(userDocuments));
-    } catch (e) {
-      console.error('Failed to persist user documents:', e);
-    }
+    secureStorage.setItem('clausetrace_user_documents', userDocuments);
   }, [userDocuments]);
 
   // Account Switching Handlers
@@ -353,7 +319,7 @@ export function App() {
       setUserDocuments((prev) => prev.map((d) => (d.id === updatedDoc.id ? updatedDoc : d)));
       if (currentUser.accountType === 'personal' && currentUser.id) {
         try {
-          await saveDocumentToFirestore(currentUser.id, updatedDoc);
+          await updateDocumentChecklistInFirestore(currentUser.id, updatedDoc.id, updated);
         } catch {}
       }
     }
@@ -386,9 +352,9 @@ export function App() {
       };
       setActiveDoc(updatedDoc);
       setUserDocuments((prev) => prev.map((d) => (d.id === updatedDoc.id ? updatedDoc : d)));
-      if (currentUser.accountType === 'personal') {
+      if (currentUser.accountType === 'personal' && currentUser.id) {
         try {
-          await saveDocumentToFirestore(currentUser.id, updatedDoc);
+          await updateDocumentChecklistInFirestore(currentUser.id, updatedDoc.id, updatedChecklist);
         } catch {}
       }
     }
@@ -413,9 +379,9 @@ export function App() {
       };
       setActiveDoc(updatedDoc);
       setUserDocuments((prev) => prev.map((d) => (d.id === updatedDoc.id ? updatedDoc : d)));
-      if (currentUser.accountType === 'personal') {
+      if (currentUser.accountType === 'personal' && currentUser.id) {
         try {
-          await saveDocumentToFirestore(currentUser.id, updatedDoc);
+          await updateDocumentChecklistInFirestore(currentUser.id, updatedDoc.id, updatedChecklist);
         } catch {}
       }
     }
@@ -439,9 +405,9 @@ export function App() {
       };
       setActiveDoc(updatedDoc);
       setUserDocuments((prev) => prev.map((d) => (d.id === updatedDoc.id ? updatedDoc : d)));
-      if (currentUser.accountType === 'personal') {
+      if (currentUser.accountType === 'personal' && currentUser.id) {
         try {
-          await saveDocumentToFirestore(currentUser.id, updatedDoc);
+          await updateDocumentChecklistInFirestore(currentUser.id, updatedDoc.id, updated);
         } catch {}
       }
     }
@@ -477,6 +443,7 @@ export function App() {
     actions: 'What can I do?',
     checklist: 'Before you agree',
     briefing: 'Prepare for a lawyer',
+    analytics: 'BigQuery Analytics',
     privacy: 'About & Safety',
   };
 
@@ -484,39 +451,48 @@ export function App() {
   const calculatedAttentionCount = activeDoc?.keyTerms?.attentionItemsCount || 0;
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-[#F8F9FA] text-[#1F1F1F] font-sans antialiased">
-      {/* Navigation Rail & Drawer */}
-      <Navigation
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        activeDoc={activeDoc}
-        currentUser={currentUser}
-        userDocCount={userDocuments.length}
-        attentionCount={calculatedAttentionCount}
-        isMobileOpen={isMobileNavOpen}
-        onCloseMobile={() => setIsMobileNavOpen(false)}
-      />
+    <LiveRegionProvider>
+      <div className="flex h-screen w-screen overflow-hidden bg-[#F8F9FA] text-[#1F1F1F] font-sans antialiased">
+        {/* Accessible Skip Link for WCAG 2.1 AAA */}
+        <a 
+          href="#main-content" 
+          className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:px-4 focus:py-2 focus:bg-[#1A73E8] focus:text-white focus:rounded-xl focus:shadow-md focus:font-semibold focus:outline-none"
+        >
+          Skip to main content
+        </a>
 
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col h-screen overflow-hidden">
-        {/* Top Header */}
-        <Header
-          currentTabName={tabTitles[activeTab]}
+        {/* Navigation Rail & Drawer */}
+        <Navigation
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
           activeDoc={activeDoc}
-          userDocuments={userDocuments}
-          demoDocuments={demoDocuments}
           currentUser={currentUser}
-          onSelectDoc={handleSelectDocument}
-          onOpenUpload={() => setIsUploadModalOpen(true)}
-          onSwitchToDemo={handleSwitchToDemo}
-          onSwitchToPersonal={handleSwitchToPersonal}
-          onOpenAuthModal={() => setIsAuthModalOpen(true)}
-          onLogout={handleLogout}
-          onToggleMobileMenu={() => setIsMobileNavOpen(!isMobileNavOpen)}
+          userDocCount={userDocuments.length}
+          attentionCount={calculatedAttentionCount}
+          isMobileOpen={isMobileNavOpen}
+          onCloseMobile={() => setIsMobileNavOpen(false)}
         />
 
-        {/* Scrollable Viewport */}
-        <main className="flex-1 overflow-y-auto">
+        {/* Main Content Area */}
+        <div className="flex-1 flex flex-col h-screen overflow-hidden">
+          {/* Top Header */}
+          <Header
+            currentTabName={tabTitles[activeTab]}
+            activeDoc={activeDoc}
+            userDocuments={userDocuments}
+            demoDocuments={demoDocuments}
+            currentUser={currentUser}
+            onSelectDoc={handleSelectDocument}
+            onOpenUpload={() => setIsUploadModalOpen(true)}
+            onSwitchToDemo={handleSwitchToDemo}
+            onSwitchToPersonal={handleSwitchToPersonal}
+            onOpenAuthModal={() => setIsAuthModalOpen(true)}
+            onLogout={handleLogout}
+            onToggleMobileMenu={() => setIsMobileNavOpen(!isMobileNavOpen)}
+          />
+
+          {/* Scrollable Viewport */}
+          <main id="main-content" className="flex-1 overflow-y-auto" tabIndex={-1}>
           {activeTab === 'home' && (
             <HomeView
               onOpenUpload={() => setIsUploadModalOpen(true)}
@@ -631,6 +607,10 @@ export function App() {
             />
           )}
 
+          {activeTab === 'analytics' && (
+            <BigQueryAnalyticsView />
+          )}
+
           {activeTab === 'privacy' && (
             <PrivacyView />
           )}
@@ -652,7 +632,8 @@ export function App() {
         onLogin={handleLogin}
         currentEmail={currentUser.email}
       />
-    </div>
+      </div>
+    </LiveRegionProvider>
   );
 }
 

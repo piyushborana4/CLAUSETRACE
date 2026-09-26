@@ -60,6 +60,23 @@
         "updatedAt": { "type": "string" }
       },
       "required": ["id", "userId", "docAId", "docBId"]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "Zero-trust immutable audit trail record for document operations and compliance",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "action": { "type": "string", "maxLength": 100 },
+        "resourceType": { "type": "string", "maxLength": 50 },
+        "resourceId": { "type": "string", "maxLength": 100 },
+        "documentHash": { "type": "string", "maxLength": 64 },
+        "status": { "type": "string", "maxLength": 20 },
+        "details": { "type": "string", "maxLength": 1000 },
+        "timestamp": { "type": "string" }
+      },
+      "required": ["id", "userId", "action", "timestamp"]
     }
   },
   "firestore": {
@@ -74,6 +91,10 @@
     "/comparisons/{comparisonId}": {
       "schema": "DocumentComparison",
       "description": "Private comparison records generated between documents"
+    },
+    "/audit_logs/{logId}": {
+      "schema": "AuditLog",
+      "description": "Audit trail log documents tracking access and data modifications"
     }
   }
 }

@@ -36,6 +36,109 @@ export const ActionCenterView: React.FC<ActionCenterViewProps> = ({
   onOpenUpload,
   onSwitchToDemo,
 }) => {
+  const docFindings = Array.isArray(document?.findings) ? document.findings : [];
+  const defaultFinding: Finding = docFindings[0] || {
+    id: 'f-default',
+    title: 'General Terms',
+    category: 'GENERAL' as any,
+    status: 'DOCUMENT_SUPPORTED',
+    summary: 'General terms in document',
+    page: 1,
+    section: 'Provisions',
+    evidence: 'Agreement terms.',
+    why_it_matters: 'Clarification on provisions.',
+    suggested_action: 'Request clarification.',
+    requires_professional_review: false,
+  };
+
+  const [selectedFinding, setSelectedFinding] = useState<Finding>(
+    preselectedFinding || defaultFinding
+  );
+  const [recipientRole, setRecipientRole] = useState<string>('HR / Company');
+  const [copied, setCopied] = useState<boolean>(false);
+
+  // Multi-selection state for batch export
+  const [selectedFindingIds, setSelectedFindingIds] = useState<Set<string>>(() => {
+    const initialId = preselectedFinding?.id || defaultFinding.id;
+    return new Set(docFindings.length > 0 ? [initialId] : []);
+  });
+
+  // Modal states
+  const [isExportModalOpen, setIsExportModalOpen] = useState<boolean>(false);
+  const [isExporting, setIsExporting] = useState<boolean>(false);
+  const [exportSuccessToast, setExportSuccessToast] = useState<string | null>(null);
+
+  // Export options
+  const [includeEvidence, setIncludeEvidence] = useState<boolean>(true);
+  const [includeTimelines, setIncludeTimelines] = useState<boolean>(true);
+  const [includeDisclaimer, setIncludeDisclaimer] = useState<boolean>(true);
+  const [customExportNote, setCustomExportNote] = useState<string>('');
+  const [reviewerName, setReviewerName] = useState<string>(currentUser?.name || 'Document Reviewer');
+
+  // Custom edits dictionary for findings
+  const [customDrafts, setCustomDrafts] = useState<Record<string, { subject: string; body: string }>>({});
+
+  // Helper generator function
+  const generatePoliteMessage = (f: Finding | undefined, role: string) => {
+    const finding = f || defaultFinding;
+    const isLandlord = role.includes('Landlord') || role.includes('Owner');
+    const isSociety = role.includes('Society');
+    const isClient = role.includes('Client');
+
+    const greeting = isLandlord 
+      ? "Hi," 
+      : isSociety 
+      ? "Dear Managing Committee," 
+      : isClient 
+      ? "Hi," 
+      : "Hi [Name],";
+
+    const docTitle = document?.title || 'Document';
+    const docContext = isLandlord
+      ? `I'm reviewing the draft agreement for the property (${docTitle}).`
+      : isSociety
+      ? `I am writing with reference to the document regarding ${docTitle}.`
+      : isClient
+      ? `I'm reviewing our agreement draft for ${docTitle} and wanted to confirm a few points.`
+      : `I'm reviewing the ${docTitle} draft and had a quick question to make sure I understand everything correctly.`;
+
+    const question = `Regarding Section ${finding.section || 'General'} on Page ${finding.page || 1} ("${finding.title}"):\nCould you clarify whether this applies in all situations, or if there is specific guidance on how this works?\n\n"${finding.evidence || ''}"`;
+
+    const signoff = isSociety 
+      ? "Thank you for your guidance,\nWarm regards,\n[Your Name]" 
+      : "Thank you for taking the time to clarify!\n\nBest regards,\n[Your Name]";
+
+    return {
+      subject: `Question regarding ${finding.title} (Page ${finding.page || 1}, Section ${finding.section || 'General'})`,
+      body: `${greeting}\n\n${docContext}\n\n${question}\n\n${signoff}`
+    };
+  };
+
+  const [currentEmailDraft, setCurrentEmailDraft] = useState<ClarificationEmailDraft>(() => {
+    const initial = generatePoliteMessage(selectedFinding || defaultFinding, recipientRole);
+    return {
+      id: 'draft-initial',
+      recipientRole,
+      subject: initial.subject,
+      body: initial.body,
+      referencedClauses: [
+        {
+          section: (selectedFinding || defaultFinding).section || 'Clause',
+          page: (selectedFinding || defaultFinding).page || 1,
+          title: (selectedFinding || defaultFinding).title || 'Finding',
+        }
+      ],
+      tone: 'polite_inquiry'
+    };
+  });
+
+  // Keep reviewer name in sync if currentUser updates
+  useEffect(() => {
+    if (currentUser?.name) {
+      setReviewerName(currentUser.name);
+    }
+  }, [currentUser?.name]);
+
   if (!document) {
     return (
       <div className="max-w-2xl mx-auto px-6 py-16 text-center space-y-6">
@@ -75,108 +178,6 @@ export const ActionCenterView: React.FC<ActionCenterViewProps> = ({
       </div>
     );
   }
-
-  const docFindings = Array.isArray(document.findings) ? document.findings : [];
-  const defaultFinding: Finding = docFindings[0] || {
-    id: 'f-default',
-    title: 'General Terms',
-    category: 'GENERAL' as any,
-    status: 'DOCUMENT_SUPPORTED',
-    summary: 'General terms in document',
-    page: 1,
-    section: 'Provisions',
-    evidence: 'Agreement terms.',
-    why_it_matters: 'Clarification on provisions.',
-    suggested_action: 'Request clarification.',
-    requires_professional_review: false,
-  };
-
-  const [selectedFinding, setSelectedFinding] = useState<Finding>(
-    preselectedFinding || defaultFinding
-  );
-  const [recipientRole, setRecipientRole] = useState<string>('HR / Company');
-  const [copied, setCopied] = useState<boolean>(false);
-
-  // Multi-selection state for batch export
-  const [selectedFindingIds, setSelectedFindingIds] = useState<Set<string>>(() => {
-    const initialId = preselectedFinding?.id || defaultFinding.id;
-    return new Set(docFindings.length > 0 ? [initialId] : []);
-  });
-
-  // Modal states
-  const [isExportModalOpen, setIsExportModalOpen] = useState<boolean>(false);
-  const [isExporting, setIsExporting] = useState<boolean>(false);
-  const [exportSuccessToast, setExportSuccessToast] = useState<string | null>(null);
-
-  // Export options
-  const [includeEvidence, setIncludeEvidence] = useState<boolean>(true);
-  const [includeTimelines, setIncludeTimelines] = useState<boolean>(true);
-  const [includeDisclaimer, setIncludeDisclaimer] = useState<boolean>(true);
-  const [customExportNote, setCustomExportNote] = useState<string>('');
-  const [reviewerName, setReviewerName] = useState<string>(currentUser?.name || 'Document Reviewer');
-
-  // Helper generator function
-  const generatePoliteMessage = (f: Finding | undefined, role: string) => {
-    const finding = f || defaultFinding;
-    const isLandlord = role.includes('Landlord') || role.includes('Owner');
-    const isSociety = role.includes('Society');
-    const isClient = role.includes('Client');
-
-    const greeting = isLandlord 
-      ? "Hi," 
-      : isSociety 
-      ? "Dear Managing Committee," 
-      : isClient 
-      ? "Hi," 
-      : "Hi [Name],";
-
-    const docContext = isLandlord
-      ? `I'm reviewing the draft agreement for the property (${document.title}).`
-      : isSociety
-      ? `I am writing with reference to the document regarding ${document.title}.`
-      : isClient
-      ? `I'm reviewing our agreement draft for ${document.title} and wanted to confirm a few points.`
-      : `I'm reviewing the ${document.title} draft and had a quick question to make sure I understand everything correctly.`;
-
-    const question = `Regarding Section ${finding.section || 'General'} on Page ${finding.page || 1} ("${finding.title}"):\nCould you clarify whether this applies in all situations, or if there is specific guidance on how this works?\n\n"${finding.evidence || ''}"`;
-
-    const signoff = isSociety 
-      ? "Thank you for your guidance,\nWarm regards,\n[Your Name]" 
-      : "Thank you for taking the time to clarify!\n\nBest regards,\n[Your Name]";
-
-    return {
-      subject: `Question regarding ${finding.title} (Page ${finding.page || 1}, Section ${finding.section || 'General'})`,
-      body: `${greeting}\n\n${docContext}\n\n${question}\n\n${signoff}`
-    };
-  };
-
-  // Custom edits dictionary for findings
-  const [customDrafts, setCustomDrafts] = useState<Record<string, { subject: string; body: string }>>({});
-
-  const [currentEmailDraft, setCurrentEmailDraft] = useState<ClarificationEmailDraft>(() => {
-    const initial = generatePoliteMessage(selectedFinding || defaultFinding, recipientRole);
-    return {
-      id: 'draft-initial',
-      recipientRole,
-      subject: initial.subject,
-      body: initial.body,
-      referencedClauses: [
-        {
-          section: (selectedFinding || defaultFinding).section || 'Clause',
-          page: (selectedFinding || defaultFinding).page || 1,
-          title: (selectedFinding || defaultFinding).title || 'Finding',
-        }
-      ],
-      tone: 'polite_inquiry'
-    };
-  });
-
-  // Keep reviewer name in sync if currentUser updates
-  useEffect(() => {
-    if (currentUser?.name) {
-      setReviewerName(currentUser.name);
-    }
-  }, [currentUser?.name]);
 
   // Update current draft when finding changes
   const handleSelectFinding = (finding: Finding) => {

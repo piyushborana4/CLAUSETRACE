@@ -11,7 +11,7 @@ import {
   onSnapshot
 } from 'firebase/firestore';
 import { db, auth, handleFirestoreError, OperationType } from './firebase';
-import { LegalDocument, UserProfile, DocumentComparison } from '../types';
+import { LegalDocument, UserProfile, DocumentComparison, ChecklistItem, Finding } from '../types';
 
 // Save or sync User Profile
 export async function syncUserProfileToFirestore(user: UserProfile): Promise<void> {
@@ -35,7 +35,7 @@ export async function syncUserProfileToFirestore(user: UserProfile): Promise<voi
   }
 }
 
-// Save or Update a Document in Firestore
+// Save or Full Update a Document in Firestore
 export async function saveDocumentToFirestore(userId: string, document: LegalDocument): Promise<void> {
   if (!auth.currentUser || auth.currentUser.uid !== userId) {
     return;
@@ -52,6 +52,48 @@ export async function saveDocumentToFirestore(userId: string, document: LegalDoc
     await setDoc(docRef, dataToSave, { merge: true });
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, path);
+  }
+}
+
+// Partial Update: Update only checklist items to conserve bandwidth and minimize write overhead
+export async function updateDocumentChecklistInFirestore(
+  userId: string, 
+  documentId: string, 
+  checklist: ChecklistItem[]
+): Promise<void> {
+  if (!auth.currentUser || auth.currentUser.uid !== userId) {
+    return;
+  }
+  const path = `documents/${documentId}`;
+  try {
+    const docRef = doc(db, 'documents', documentId);
+    await updateDoc(docRef, {
+      checklist,
+      updatedAt: new Date().toISOString(),
+    });
+  } catch (err) {
+    handleFirestoreError(err, OperationType.UPDATE, path);
+  }
+}
+
+// Partial Update: Update specific findings array or status without transmitting whole base64/pages
+export async function updateDocumentFindingsInFirestore(
+  userId: string,
+  documentId: string,
+  findings: Finding[]
+): Promise<void> {
+  if (!auth.currentUser || auth.currentUser.uid !== userId) {
+    return;
+  }
+  const path = `documents/${documentId}`;
+  try {
+    const docRef = doc(db, 'documents', documentId);
+    await updateDoc(docRef, {
+      findings,
+      updatedAt: new Date().toISOString(),
+    });
+  } catch (err) {
+    handleFirestoreError(err, OperationType.UPDATE, path);
   }
 }
 

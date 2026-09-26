@@ -56,6 +56,14 @@ service cloud.firestore {
         data.docBId is string && data.docBId.size() <= 128;
     }
 
+    function isValidAuditLog(data) {
+      return data.keys().hasAll(['id', 'userId', 'action', 'timestamp']) &&
+        data.id is string && data.id.size() <= 128 &&
+        data.userId is string && data.userId == request.auth.uid &&
+        data.action is string && data.action.size() <= 100 &&
+        data.timestamp is string && data.timestamp.size() <= 100;
+    }
+
     // User Profile collection
     match /users/{userId} {
       allow get: if isValidId(userId) && isOwner(userId);
@@ -80,6 +88,14 @@ service cloud.firestore {
       allow create: if isValidId(comparisonId) && isSignedIn() && isValidComparison(incoming()) && incoming().userId == request.auth.uid && incoming().id == comparisonId;
       allow update: if isValidId(comparisonId) && isSignedIn() && (resource == null || resource.data.userId == request.auth.uid) && incoming().userId == request.auth.uid;
       allow delete: if isValidId(comparisonId) && isSignedIn() && (resource == null || resource.data.userId == request.auth.uid);
+    }
+
+    // Zero-Trust Immutable Audit Logs (Append-only by authenticated owner, no updates or deletes)
+    match /audit_logs/{logId} {
+      allow get: if isValidId(logId) && isSignedIn() && (resource == null || resource.data.userId == request.auth.uid);
+      allow list: if isSignedIn() && (resource == null || resource.data.userId == request.auth.uid);
+      allow create: if isValidId(logId) && isSignedIn() && isValidAuditLog(incoming()) && incoming().userId == request.auth.uid && incoming().id == logId;
+      allow update, delete: if false; // Strict immutability guarantee
     }
   }
 }

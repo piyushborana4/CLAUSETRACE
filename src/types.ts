@@ -126,6 +126,7 @@ export interface LegalDocument {
   pages: DocumentPage[];
   source: 'demo' | 'user';
   isDemo?: boolean;
+  isFallbackDemo?: boolean;
   status?: 'analyzing' | 'ready' | 'error';
   lastOpened?: string;
 }
@@ -187,6 +188,11 @@ export interface GeneralLegalInfoTopic {
   questionsToConsider: string[];
   statutorySources: string[];
   limitations: string;
+  title?: string;
+  plainSummary?: string;
+  commonScenarios?: string[];
+  whatToLookFor?: string[];
+  questionsToAsk?: string[];
 }
 
 export interface ClarificationEmailDraft {
