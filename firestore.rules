@@ -1,0 +1,85 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default-deny all unspecified routes
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidUserProfile(data) {
+      return data.keys().hasAll(['id', 'email']) &&
+        data.id is string && data.id.size() <= 128 &&
+        data.email is string && data.email.size() <= 200 &&
+        (!('name' in data) || (data.name is string && data.name.size() <= 200)) &&
+        (!('avatarUrl' in data) || (data.avatarUrl is string && data.avatarUrl.size() <= 1000)) &&
+        (!('accountType' in data) || (data.accountType is string)) &&
+        (!('provider' in data) || (data.provider is string)) &&
+        (!('createdAt' in data) || (data.createdAt is string && data.createdAt.size() <= 100)) &&
+        (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 100));
+    }
+
+    function isValidDocument(data) {
+      return data.keys().hasAll(['id', 'userId', 'title', 'source']) &&
+        data.id is string && data.id.size() <= 128 &&
+        data.userId is string && data.userId == request.auth.uid &&
+        data.title is string && data.title.size() <= 500 &&
+        data.source is string;
+    }
+
+    function isValidComparison(data) {
+      return data.keys().hasAll(['id', 'userId', 'docAId', 'docBId']) &&
+        data.id is string && data.id.size() <= 128 &&
+        data.userId is string && data.userId == request.auth.uid &&
+        data.docAId is string && data.docAId.size() <= 128 &&
+        data.docBId is string && data.docBId.size() <= 128;
+    }
+
+    // User Profile collection
+    match /users/{userId} {
+      allow get: if isValidId(userId) && isOwner(userId);
+      allow create: if isValidId(userId) && isOwner(userId) && isValidUserProfile(incoming()) && incoming().id == userId;
+      allow update: if isValidId(userId) && isOwner(userId) && isValidUserProfile(incoming());
+      allow delete: if isValidId(userId) && isOwner(userId);
+    }
+
+    // User Legal Documents collection
+    match /documents/{documentId} {
+      allow get: if isValidId(documentId) && isSignedIn() && (resource == null || resource.data.userId == request.auth.uid);
+      allow list: if isSignedIn() && (resource == null || resource.data.userId == request.auth.uid);
+      allow create: if isValidId(documentId) && isSignedIn() && isValidDocument(incoming()) && incoming().userId == request.auth.uid && incoming().id == documentId;
+      allow update: if isValidId(documentId) && isSignedIn() && (resource == null || resource.data.userId == request.auth.uid) && incoming().userId == request.auth.uid;
+      allow delete: if isValidId(documentId) && isSignedIn() && (resource == null || resource.data.userId == request.auth.uid);
+    }
+
+    // Document Comparisons collection
+    match /comparisons/{comparisonId} {
+      allow get: if isValidId(comparisonId) && isSignedIn() && (resource == null || resource.data.userId == request.auth.uid);
+      allow list: if isSignedIn() && (resource == null || resource.data.userId == request.auth.uid);
+      allow create: if isValidId(comparisonId) && isSignedIn() && isValidComparison(incoming()) && incoming().userId == request.auth.uid && incoming().id == comparisonId;
+      allow update: if isValidId(comparisonId) && isSignedIn() && (resource == null || resource.data.userId == request.auth.uid) && incoming().userId == request.auth.uid;
+      allow delete: if isValidId(comparisonId) && isSignedIn() && (resource == null || resource.data.userId == request.auth.uid);
+    }
+  }
+}

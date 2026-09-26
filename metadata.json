@@ -1,0 +1,6 @@
+{
+  "name": "CLAUSETRACE",
+  "description": "Understand any legal document before you act. Find what matters, trace answers to exact pages, compare agreements, and verify simple checklists before signing.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

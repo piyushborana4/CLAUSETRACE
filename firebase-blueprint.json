@@ -1,0 +1,79 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile data stored upon Google sign in",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string", "maxLength": 150 },
+        "email": { "type": "string", "maxLength": 200 },
+        "avatarUrl": { "type": "string", "maxLength": 1000 },
+        "accountType": { "type": "string", "enum": ["personal", "demo"] },
+        "provider": { "type": "string", "enum": ["google", "password", "demo"] },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "email"]
+    },
+    "LegalDocument": {
+      "title": "LegalDocument",
+      "description": "User uploaded legal document with AI extraction findings",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "title": { "type": "string", "maxLength": 200 },
+        "documentType": { "type": "string", "maxLength": 100 },
+        "parties": { "type": "array" },
+        "effectiveDate": { "type": "string", "maxLength": 100 },
+        "jurisdiction": { "type": "string", "maxLength": 200 },
+        "pageCount": { "type": "number" },
+        "uploadedAt": { "type": "string" },
+        "keyTerms": { "type": "object" },
+        "findings": { "type": "array" },
+        "crossClauseRelationships": { "type": "array" },
+        "missingOrAmbiguous": { "type": "array" },
+        "checklist": { "type": "array" },
+        "pages": { "type": "array" },
+        "source": { "type": "string", "enum": ["user", "demo"] },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "userId", "title", "source"]
+    },
+    "DocumentComparison": {
+      "title": "DocumentComparison",
+      "description": "Comparison record between two legal documents",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "docAId": { "type": "string" },
+        "docATitle": { "type": "string", "maxLength": 200 },
+        "docBId": { "type": "string" },
+        "docBTitle": { "type": "string", "maxLength": 200 },
+        "comparisonDate": { "type": "string" },
+        "summary": { "type": "string", "maxLength": 5000 },
+        "items": { "type": "array" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "userId", "docAId", "docBId"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "Private user profile document"
+    },
+    "/documents/{documentId}": {
+      "schema": "LegalDocument",
+      "description": "Private legal documents uploaded and analyzed by the user"
+    },
+    "/comparisons/{comparisonId}": {
+      "schema": "DocumentComparison",
+      "description": "Private comparison records generated between documents"
+    }
+  }
+}
